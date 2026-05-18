@@ -70,13 +70,13 @@ Items marked with (R) are required *prior to targeting to a milestone / release*
 - [x] (R) KEP approvers have approved the KEP status as `implementable`
 - [x] (R) Design details are appropriately documented
 - [x] (R) Test plan is in place, giving consideration to SIG Architecture and SIG Testing input (including test refactors)
-  - [] e2e Tests for all Beta API Operations (endpoints)
-  - [ ] (R) Ensure GA e2e tests meet requirements for [Conformance Tests](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/conformance-tests.md)
-  - [ ] (R) Minimum Two Week Window for GA e2e tests to prove flake free
+  - [x] e2e Tests for all Beta API Operations (endpoints)
+  - [x] (R) Ensure GA e2e tests meet requirements for [Conformance Tests](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/conformance-tests.md)
+  - [x] (R) Minimum Two Week Window for GA e2e tests to prove flake free
 - [x] (R) Graduation criteria is in place
-  - [ ] (R) [all GA Endpoints](https://github.com/kubernetes/community/pull/1806) must be hit by [Conformance Tests](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/conformance-tests.md)
-- [] (R) Production readiness review completed
-- [] (R) Production readiness review approved
+  - [x] (R) [all GA Endpoints](https://github.com/kubernetes/community/pull/1806) must be hit by [Conformance Tests](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/conformance-tests.md)
+- [ ] (R) Production readiness review completed
+- [ ] (R) Production readiness review approved
 - [x] "Implementation History" section is up-to-date for milestone
 - [x] User-facing documentation has been created in [kubernetes/website], for publication to [kubernetes.io]
 - [ ] Supporting documentation—e.g., additional design documents, links to mailing list discussions/SIG meetings, relevant PRs/issues, release notes
@@ -487,22 +487,37 @@ implementing this enhancement to ensure the enhancements have also solid foundat
     *   Verify the plugin correctly uses the shared library to match pod requirements against node declared features, and correctly admits or rejects the request based on the library's result.
     *   Verify feature gate enablement and resource/subresource filtering.
 
-** Test Coverage:**
+** Test Coverage in v1.36:**
 
-1. Shared library
-- `k8s.io/component-helpers/nodedeclaredfeatures`: `20260115` - `88.2`
-- `k8s.io/component-helpers/nodedeclaredfeatures/features/inplacepodresize`: `20260115` - `84`
-- `k8s.io/component-helpers/nodedeclaredfeatures/features/restartallcontainers`: `20260115` - `84.6`
+<!--
+  Generated with:
+  go test -cover \
+    ./staging/src/k8s.io/component-helpers/nodedeclaredfeatures \
+    ./staging/src/k8s.io/component-helpers/nodedeclaredfeatures/features/usernamespaceshostnetwork \
+    ./staging/src/k8s.io/component-helpers/nodedeclaredfeatures/features/inplacepodresize \
+    ./staging/src/k8s.io/component-helpers/nodedeclaredfeatures/features/restartallcontainers \
+    ./pkg/scheduler/framework/plugins/nodedeclaredfeatures \
+    ./plugin/pkg/admission/nodedeclaredfeatures \
+    ./pkg/kubelet \
+    ./pkg/kubelet/lifecycle
+--->
 
-2. kube-scheduler
-- `pkg/scheduler/framework/plugins/nodedeclaredfeatures`: `20260115` - `64.1`
+1. **Shared library**
+   - `k8s.io/component-helpers/nodedeclaredfeatures`: `93.7%`
+   - `k8s.io/component-helpers/nodedeclaredfeatures/features/inplacepodresize`: `72.2%`
+   - `k8s.io/component-helpers/nodedeclaredfeatures/features/restartallcontainers`: `85.7%`
+   - `k8s.io/component-helpers/nodedeclaredfeatures/features/usernamespaceshostnetwork`: `30.0%`
 
-3. Admission controller
-- `plugin/pkg/admission/nodedeclaredfeatures`: `20260115` - `71.6`
+2. **kube-scheduler**
+   - `pkg/scheduler/framework/plugins/nodedeclaredfeatures`: `65.3%`
 
-4. kubelet
-- `pkg/kubelet/kubelet_node_declared_features.go`: `20260115` - `100`
-- `pkg/kubelet/lifecycle/handlers.go`: `20260115` - `84.4`
+3. **Admission controller**
+   - `plugin/pkg/admission/nodedeclaredfeatures`: `75.4%`
+
+4. **kubelet**
+   - `pkg/kubelet/kubelet_node_declared_features.go`: `85.7%`
+   - `pkg/kubelet/lifecycle/handlers.go`: `84.7%`
+
 
 ##### Integration tests
 
@@ -519,6 +534,18 @@ implementing this enhancement to ensure the enhancements have also solid foundat
         *   Integration tests in `test/integration/pods/pods_test.go`: Verify that the admission plugin correctly admits or rejects Pod `UPDATE` operations based on the `declaredFeatures` of the Node the Pod is bound to.
             *   [TestNodeDeclaredFeatureAdmission](https://github.com/kubernetes/kubernetes/blob/f4f3e5f92c38d8f3005996201bd2cdccd16629bc/test/integration/pods/pods_test.go#L1504C6-L1504C38):[integration master](https://testgrid.k8s.io/sig-release-master-blocking#integration-master&include-filter-by-regex=pods): [triage search](https://storage.googleapis.com/k8s-triage/index.html?date=2026-01-15&test=NodeDeclared)
 
+
+**Performance Impact**
+
+To validate that the scheduling overhead is comparable to existing mechanisms, we benchmarked the `NodeDeclaredFeatures` feature's performance impact.
+
+The benchmarks measure the scheduling throughput for 50,000 pods across 5,000 nodes, comparing the scenarios where the feature is enabled (with varying numbers of declared features) against a baseline where `NodeDeclaredFeatures` is completely disabled. The results confirm no significant performance degradation:
+
+| Scenario | Dashboard | Scheduling Throughput (pods/s) |
+| :--- | :--- | :--- |
+| **NodeDeclaredFeatures Disabled** | [perf-dash](https://perf-dash.k8s.io/#/?jobname=scheduler-perf-benchmark&metriccategoryname=Scheduler&metricname=BenchmarkPerfScheduling&Metric=SchedulingThroughput&Name=BenchmarkPerfScheduling%2FSchedulingBasic%2F5000Nodes_50000Pods_NodeDeclaredFeaturesDisabled%2Fnamespace-2&event=not%20applicable&extension_point=not%20applicable&plugin=not%20applicable&result=not%20applicable) | P50:1164 P90:1625 P99:1675 |
+| **NodeDeclaredFeatures Enabled** (20 Declared Features) | [perf-dash](https://perf-dash.k8s.io/#/?jobname=scheduler-perf-benchmark&metriccategoryname=Scheduler&metricname=BenchmarkPerfScheduling&Metric=SchedulingThroughput&Name=BenchmarkPerfScheduling%2FNodeDeclaredFeaturesEnabled%2F5000Nodes20DeclaredFeatures%2Ftest&event=not%20applicable&extension_point=not%20applicable&plugin=not%20applicable&result=not%20applicable) | P50:1205 P90:1623 P99:1648 |
+| **NodeDeclaredFeatures Enabled** (100 Declared Features) | [perf-dash](https://perf-dash.k8s.io/#/?jobname=scheduler-perf-benchmark&metriccategoryname=Scheduler&metricname=BenchmarkPerfScheduling&Metric=SchedulingThroughput&Name=BenchmarkPerfScheduling%2FNodeDeclaredFeaturesEnabled%2F5000Nodes100DeclaredFeatures%2Ftest&event=not%20applicable&extension_point=not%20applicable&plugin=not%20applicable&result=not%20applicable) | P50:1185 P90:1616 P99:1693|
 
 ##### e2e tests
 
@@ -613,12 +640,18 @@ in back-to-back releases.
 **Beta:**
 
 *   Feature gate `NodeDeclaredFeatures` is enabled by default.
-*   Enhance the shared library to support Node Autoscaler integration. This include:
-    *  Providing an API to deterministically derive declaredFeatures from static node configuration
-    *  Providing an API to determine the configuration dependencies (e.g., feature gates) required for a specific declared feature.
 *   Unit coverage for the new changes in the shared library.
 *   Integration test coverage for the changes added for cluster autoscaler support.
 *   Performance tests for the scheduler plugin are implemented to measure scheduling throughput and latency impact, ensuring no significant regressions.
+*   Enhance the shared library to support Node Autoscaler integration. This includes:
+    *  Providing an API to deterministically derive `declaredFeatures` from static node configuration.
+    *  Providing an API to determine the configuration dependencies (e.g., feature gates) required for a specific declared feature.
+
+**GA (Stable):**
+
+*   4 alpha/beta Kubernetes features are successfully leveraging the Node Declared Features framework for version skew management.
+*   No regressions, bugs, or scheduling issues reported since the Beta phase.
+
 
 ### Upgrade/Downgrade Strategy
 
@@ -847,7 +880,7 @@ question.
   - Components exposing the metric: kube-scheduler
 
   - Metric name: kubelet_admission_rejections_total{reason="PodFeatureUnsupported"}
-  - Components exposing the metric: kube-scheduler
+  - Components exposing the metric: kubelet
 
 
 ###### Are there any missing metrics that would be useful to have to improve observability of this feature?
@@ -956,6 +989,8 @@ details). For now, we leave it here.
 - 2025-06-12: KEP discussion in SIG Scheduling meeting.
 - 2025-06-26: KEP discussion in SIG Architecture meeting.
 - 2025-11-09: Alpha Implementation merged.
+- 2026-02-10: KEP updated and targeting Beta in v1.36.
+- 2026-05-17: KEP updated and targeting Stable (GA) in v1.37.
 
 ## Drawbacks
 
